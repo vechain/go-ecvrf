@@ -1,1 +1,1 @@
-# ecvrf-go
+# go-ecvrf
