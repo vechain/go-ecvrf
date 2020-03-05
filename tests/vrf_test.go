@@ -1,4 +1,4 @@
-package ecvrf
+package tests
 
 import (
 	"encoding/hex"
@@ -6,10 +6,11 @@ import (
 
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/stretchr/testify/assert"
+	"github.com/vechain/go-ecvrf"
 )
 
 func TestSecp256k1Sha256Tai(t *testing.T) {
-	vrf := NewSecp256k1Sha256Tai()
+	vrf := ecvrf.NewSecp256k1Sha256Tai()
 
 	skBytes, _ := hex.DecodeString("c9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721")
 	sk, _ := btcec.PrivKeyFromBytes(btcec.S256(), skBytes)
