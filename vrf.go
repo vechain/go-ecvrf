@@ -22,7 +22,7 @@ func New(cfg *Config) VRF {
 func NewSecp256k1Sha256Tai() VRF {
 	return New(&Config{
 		0xfe,
-		1,
+		0x01,
 		sha256.New,
 		func(c elliptic.Curve, x *big.Int) *big.Int {
 			// y² = x³ + b
@@ -33,7 +33,29 @@ func NewSecp256k1Sha256Tai() VRF {
 			x3.Mod(x3, c.Params().P)
 			return x3
 		},
-		defaultSqrt,
+		DefaultSqrt,
+	})
+}
+
+func NewP256Sha256Tai() VRF {
+	return New(&Config{
+		0x01,
+		0x01,
+		sha256.New,
+		func(c elliptic.Curve, x *big.Int) *big.Int {
+			// y² = x³ - 3x + b
+			x3 := new(big.Int).Mul(x, x)
+			x3.Mul(x3, x)
+
+			threeX := new(big.Int).Lsh(x, 1)
+			threeX.Add(threeX, x)
+
+			x3.Sub(x3, threeX)
+			x3.Add(x3, c.Params().B)
+			x3.Mod(x3, c.Params().P)
+			return x3
+		},
+		DefaultSqrt,
 	})
 }
 

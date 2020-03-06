@@ -299,7 +299,7 @@ func bits2octets(in []byte, q *big.Int, rolen int) []byte {
 	return int2octets(z2, rolen)
 }
 
-func defaultSqrt(c elliptic.Curve, s *big.Int) *big.Int {
+func DefaultSqrt(c elliptic.Curve, s *big.Int) *big.Int {
 	var r big.Int
 	if nil == r.ModSqrt(s, c.Params().P) {
 		return nil // x is not a square
