@@ -82,7 +82,7 @@ func (v *vrf) Prove(sk *ecdsa.PrivateKey, m []byte) (beta, pi []byte, err error)
 	gamma := core.ScalarMult(H, sk.D.Bytes())
 
 	// step 4: nonce
-	k := core.GenerateNonce(sk.D, core.Hash(hbytes))
+	k := core.GenerateNonce(sk.D, hbytes)
 	kbytes := k.Bytes()
 
 	// step 5: c = hash points

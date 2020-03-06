@@ -153,11 +153,12 @@ func (c *core) HashToCurveTryAndIncrement(pk *point, alpha []byte) (*point, erro
 	return c.ScalarMult(pt, []byte{c.Cofactor}), nil
 }
 
-func (c *core) GenerateNonce(sk *big.Int, hash []byte) *big.Int {
+func (c *core) GenerateNonce(sk *big.Int, data []byte) *big.Int {
 	var (
 		q     = c.Q()
 		qlen  = q.BitLen()
 		rolen = (qlen + 7) / 8
+		hash  = c.Hash(data)
 		holen = len(hash)
 		bh    = bits2octets(hash, q, rolen)
 		bx    = int2octets(sk, rolen)
