@@ -2,7 +2,7 @@
 
 # go-ecvrf
 
-A Golang implementation of Elliptic Curve Verifiable Random Function (VRF) follows [draft-irtf-cfrg-vrf-06](https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html) and [RFC 6979](https://tools.ietf.org/html/rfc6979).
+Zero-dependency Golang implementation of Elliptic Curve Verifiable Random Function (VRF) follows [draft-irtf-cfrg-vrf-06](https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html) and [RFC 6979](https://tools.ietf.org/html/rfc6979).
 
 # What's VRF
 
