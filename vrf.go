@@ -105,7 +105,7 @@ func (v *vrf) Prove(sk *ecdsa.PrivateKey, m []byte) (beta, pi []byte, err error)
 	s.Mod(s, q)
 
 	// step 7: encode (gamma, c, s)
-	pi = core.EncodeProof(&proof{gamma, c, s})
+	pi = core.EncodeProof(gamma, c, s)
 
 	beta = core.GammaToHash(gamma)
 	return
@@ -115,7 +115,7 @@ func (v *vrf) Verify(pk *ecdsa.PublicKey, m, pi []byte) (beta []byte, err error)
 	core := v.newCore(pk.Curve)
 
 	// step 1: decode proof
-	proof, err := core.DecodeProof(pi)
+	gamma, c, s, err := core.DecodeProof(pi)
 	if err != nil {
 		return
 	}
@@ -127,26 +127,26 @@ func (v *vrf) Verify(pk *ecdsa.PublicKey, m, pi []byte) (beta []byte, err error)
 	}
 
 	// step 3: U = sB - cY
-	sB := core.ScalarBaseMult(proof.S.Bytes())
-	cY := core.ScalarMult(&point{pk.X, pk.Y}, proof.C.Bytes())
+	sB := core.ScalarBaseMult(s.Bytes())
+	cY := core.ScalarMult(&point{pk.X, pk.Y}, c.Bytes())
 	U := core.Sub(sB, cY)
 
 	// step 4: V = sH - cGamma
-	sH := core.ScalarMult(H, proof.S.Bytes())
-	cGamma := core.ScalarMult(proof.Gamma, proof.C.Bytes())
+	sH := core.ScalarMult(H, s.Bytes())
+	cGamma := core.ScalarMult(gamma, c.Bytes())
 	V := core.Sub(sH, cGamma)
 
 	// step 5: hash points
 	derivedC := core.HashPoints([]*point{
-		H, proof.Gamma, U, V,
+		H, gamma, U, V,
 	})
 
 	// step 6: check validity
-	if derivedC.Cmp(proof.C) != 0 {
+	if derivedC.Cmp(c) != 0 {
 		err = errors.New("invalid proof")
 		return
 	}
 
-	beta = core.GammaToHash(proof.Gamma)
+	beta = core.GammaToHash(gamma)
 	return
 }

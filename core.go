@@ -15,11 +15,6 @@ type point struct {
 	X, Y *big.Int
 }
 
-type proof struct {
-	Gamma *point
-	C, S  *big.Int
-}
-
 type core struct {
 	*Config
 	curve elliptic.Curve
@@ -225,16 +220,16 @@ func (c *core) GammaToHash(gamma *point) []byte {
 	)
 }
 
-func (c *core) EncodeProof(p *proof) []byte {
-	gammaBytes := c.Marshal(p.Gamma)
+func (c *core) EncodeProof(gamma *point, C, S *big.Int) []byte {
+	gammaBytes := c.Marshal(gamma)
 
-	cbytes := int2octets(p.C, (c.OneN()+7)/8)
-	sbytes := int2octets(p.S, (c.Q().BitLen()+7)/8)
+	cbytes := int2octets(C, (c.OneN()+7)/8)
+	sbytes := int2octets(S, (c.Q().BitLen()+7)/8)
 
 	return append(append(gammaBytes, cbytes...), sbytes...)
 }
 
-func (c *core) DecodeProof(data []byte) (*proof, error) {
+func (c *core) DecodeProof(data []byte) (gamma *point, C, S *big.Int, err error) {
 	var (
 		qlen           = c.Q().BitLen()
 		n              = c.OneN()
@@ -252,18 +247,17 @@ func (c *core) DecodeProof(data []byte) (*proof, error) {
 	}
 
 	if len(data)*8 < gammaLen+clen*3 {
-		return nil, errors.New("invalid proof length")
+		err = errors.New("invalid proof length")
+		return
 	}
 
-	gamma, err := c.Unmarshal(data[0:gammaLen])
-	if err != nil {
-		return nil, err
+	if gamma, err = c.Unmarshal(data[0:gammaLen]); err != nil {
+		return
 	}
-	var ret proof
-	ret.Gamma = gamma
-	ret.C = new(big.Int).SetBytes(data[gammaLen : gammaLen+clen])
-	ret.S = new(big.Int).SetBytes(data[gammaLen+clen:])
-	return &ret, nil
+
+	C = new(big.Int).SetBytes(data[gammaLen : gammaLen+clen])
+	S = new(big.Int).SetBytes(data[gammaLen+clen:])
+	return
 }
 
 // https://tools.ietf.org/html/rfc6979#section-2.3.2
