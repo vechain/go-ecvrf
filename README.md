@@ -48,6 +48,13 @@ vrf := ecvrf.New(&ecvrf.Config{
 })
 ```
 
+# References
+
+* [draft-irtf-cfrg-vrf-06](https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html)
+* [RFC 6979](https://tools.ietf.org/html/rfc6979)
+* [witnet/vrf-rs](https://github.com/witnet/vrf-rs)
+* [google/keytransparency](https://github.com/google/keytransparency)
+
 # License
 
 Copyright (c) 2020 vechain.org.
