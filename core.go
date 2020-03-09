@@ -20,17 +20,18 @@ type core struct {
 	curve elliptic.Curve
 }
 
+// Q returns prime order of large prime order subgroup.
 func (c *core) Q() *big.Int {
 	return c.curve.Params().N
 }
 
-func (c *core) OneN() int {
-	plen := c.curve.Params().P.BitLen()
-	return (plen + 1) / 2
+// N return half of length, in octets, of a field element in F, rounded up to the nearest even integer
+func (c *core) N() int {
+	return ((c.curve.Params().P.BitLen()+1)/2 + 7) / 8
 }
 
 // Marshal marshals a point into compressed form specified in section 4.3.6 of ANSI X9.62.
-// It's the alias of `point_to_string` specified in VRF-draft-06 (https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html#rfc.section.5.5).
+// It's the alias of `point_to_string` specified in [draft-irtf-cfrg-vrf-06 section 5.5](https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html#rfc.section.5.5).
 func (c *core) Marshal(pt *point) []byte {
 	byteLen := (c.curve.Params().BitSize + 7) / 8
 	out := make([]byte, byteLen+1)
@@ -48,35 +49,8 @@ func (c *core) Marshal(pt *point) []byte {
 	return out
 }
 
-func (c *core) ScalarMult(pt *point, k []byte) *point {
-	var out point
-	out.X, out.Y = c.curve.ScalarMult(pt.X, pt.Y, k)
-	return &out
-}
-
-func (c *core) ScalarBaseMult(k []byte) *point {
-	var out point
-	out.X, out.Y = c.curve.ScalarBaseMult(k)
-	return &out
-}
-
-func (c *core) Add(pt1, pt2 *point) *point {
-	var out point
-	out.X, out.Y = c.curve.Add(pt1.X, pt1.Y, pt2.X, pt2.Y)
-	return &out
-}
-
-func (c *core) Sub(pt1, pt2 *point) *point {
-	var out point
-	// - (x, y) = (x, P - y)
-	out.X, out.Y = c.curve.Add(
-		pt1.X, pt1.Y,
-		pt2.X, new(big.Int).Sub(c.curve.Params().P, pt2.Y))
-	return &out
-}
-
 // Unmarshal unmarshals a compressed point in the form specified in section 4.3.6 of ANSI X9.62.
-// It's the alias of `string_to_point` specified in VRF-draft-06 (https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html#rfc.section.5.5).
+// It's the alias of `string_to_point` specified in [draft-irtf-cfrg-vrf-06 section 5.5](https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html#rfc.section.5.5).
 // This is borrowed from the project https://github.com/google/keytransparency.
 func (c *core) Unmarshal(in []byte) (*point, error) {
 	byteLen := (c.curve.Params().BitSize + 7) / 8
@@ -110,6 +84,30 @@ func (c *core) Unmarshal(in []byte) (*point, error) {
 	return &point{x, y}, nil
 }
 
+func (c *core) ScalarMult(pt *point, k []byte) *point {
+	x, y := c.curve.ScalarMult(pt.X, pt.Y, k)
+	return &point{x, y}
+}
+
+func (c *core) ScalarBaseMult(k []byte) *point {
+	x, y := c.curve.ScalarBaseMult(k)
+	return &point{x, y}
+}
+
+func (c *core) Add(pt1, pt2 *point) *point {
+	x, y := c.curve.Add(pt1.X, pt1.Y, pt2.X, pt2.Y)
+	return &point{x, y}
+}
+
+func (c *core) Sub(pt1, pt2 *point) *point {
+	// pt1 - pt2 = pt1 + invert(pt2),
+	// where invert(pt2) = (x2, P - y2)
+	x, y := c.curve.Add(
+		pt1.X, pt1.Y,
+		pt2.X, new(big.Int).Sub(c.curve.Params().P, pt2.Y))
+	return &point{x, y}
+}
+
 func (c *core) Hash(data ...[]byte) []byte {
 	h := c.Hasher()
 	for _, e := range data {
@@ -126,14 +124,19 @@ func (c *core) Mac(k []byte, m ...[]byte) []byte {
 	return h.Sum(nil)
 }
 
-// HashToCurveTryAndIncrement https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html#rfc.section.5.4.1.1
-func (c *core) HashToCurveTryAndIncrement(pk *point, alpha []byte) (*point, error) {
-	var (
-		pkBytes = c.Marshal(pk)
-		pt      *point
-		err     error
-	)
-	for ctr := 0; ctr < 256; ctr++ {
+// HashToCurveTryAndIncrement takes in the VRF input `alpha` and converts it to H, using the try_and_increment algorithm.
+// See: [draft-irtf-cfrg-vrf-06 section 5.4.1.1](https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html#rfc.section.5.4.1.1).
+func (c *core) HashToCurveTryAndIncrement(pk *point, alpha []byte) (H *point, err error) {
+
+	// step 1: ctr = 0
+	ctr := 0
+
+	// step 2: PK_string = point_to_string(Y)
+	pkBytes := c.Marshal(pk)
+
+	// step 3 ~ 6
+	for ; ctr < 256; ctr++ {
+		// hash_string = Hash(suite_string || one_string || PK_string || alpha_string || ctr_string)
 		hash := c.Hash(
 			[]byte{c.SuiteString, 0x01},
 			pkBytes,
@@ -141,42 +144,59 @@ func (c *core) HashToCurveTryAndIncrement(pk *point, alpha []byte) (*point, erro
 			[]byte{byte(ctr)},
 		)
 
-		if pt, err = c.Unmarshal(append([]byte{2}, hash...)); err == nil {
-			break
+		// H = arbitrary_string_to_point(hash_string)
+		if H, err = c.Unmarshal(append([]byte{2}, hash...)); err == nil {
+			if c.Cofactor > 1 {
+				// If H is not "INVALID" and cofactor > 1, set H = cofactor * H
+				H = c.ScalarMult(H, []byte{c.Cofactor})
+			}
+			return H, nil
 		}
 	}
-	if pt == nil {
-		return nil, errors.New("no valid point found")
-	}
-	return c.ScalarMult(pt, []byte{c.Cofactor}), nil
+	return nil, errors.New("no valid point found")
 }
 
-func (c *core) GenerateNonce(sk *big.Int, data []byte) *big.Int {
+// GenerateNonce generate nonce according to [RFC6979](https://tools.ietf.org/html/rfc6979).
+func (c *core) GenerateNonce(sk *big.Int, m []byte) *big.Int {
 	var (
 		q     = c.Q()
 		qlen  = q.BitLen()
 		rolen = (qlen + 7) / 8
-		hash  = c.Hash(data)
-		holen = len(hash)
-		bh    = bits2octets(hash, q, rolen)
-		bx    = int2octets(sk, rolen)
 	)
 
+	// Step A
+	// Process m through the hash function H, yielding:
+	// h1 = H(m)
+	// (h1 is a sequence of hlen bits).
+	h1 := c.Hash(m)
+	hlen := len(h1)
+
+	bx := int2octets(sk, rolen)
+	bh := bits2octets(h1, q, rolen)
+
 	// Step B
-	v := bytes.Repeat([]byte{1}, holen)
+	// Set:
+	// V = 0x01 0x01 0x01 ... 0x01
+	v := bytes.Repeat([]byte{1}, hlen)
 
 	// Step C
-	k := make([]byte, holen)
+	// Set:
+	// K = 0x00 0x00 0x00 ... 0x00
+	k := make([]byte, hlen)
 
 	// Step D ~ G
 	for i := 0; i < 2; i++ {
+		// Set:
+		// K = HMAC_K(V || 0x00 || int2octets(x) || bits2octets(h1))
 		k = c.Mac(
 			k,
 			v,
-			[]byte{byte(i)},
+			[]byte{byte(i)}, // internal octet
 			bx,
 			bh,
 		)
+		// Set:
+		// V = HMAC_K(V)
 		v = c.Mac(k, v)
 	}
 
@@ -201,15 +221,15 @@ func (c *core) GenerateNonce(sk *big.Int, data []byte) *big.Int {
 	}
 }
 
-// https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html#rfc.section.5.4.3
-func (c *core) HashPoints(points []*point) *big.Int {
+// See: [draft-irtf-cfrg-vrf-06 section 5.4.3](https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html#rfc.section.5.4.3)
+func (c *core) HashPoints(points ...*point) *big.Int {
 	v := []byte{c.SuiteString, 0x2}
 	for _, pt := range points {
 		v = append(v, c.Marshal(pt)...)
 	}
 
 	hash := c.Hash(v)
-	return bits2int(hash, c.OneN())
+	return bits2int(hash, c.N()*8)
 }
 
 func (c *core) GammaToHash(gamma *point) []byte {
@@ -223,48 +243,38 @@ func (c *core) GammaToHash(gamma *point) []byte {
 func (c *core) EncodeProof(gamma *point, C, S *big.Int) []byte {
 	gammaBytes := c.Marshal(gamma)
 
-	cbytes := int2octets(C, (c.OneN()+7)/8)
+	cbytes := int2octets(C, c.N())
 	sbytes := int2octets(S, (c.Q().BitLen()+7)/8)
 
 	return append(append(gammaBytes, cbytes...), sbytes...)
 }
 
-func (c *core) DecodeProof(data []byte) (gamma *point, C, S *big.Int, err error) {
+// See: [draft-irtf-cfrg-vrf-06 section 5.4.4](https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html#rfc.section.5.4.4)
+func (c *core) DecodeProof(pi []byte) (gamma *point, C, S *big.Int, err error) {
 	var (
-		qlen           = c.Q().BitLen()
-		n              = c.OneN()
-		gammaLen, clen int
+		ptlen = (c.curve.Params().BitSize+7)/8 + 1
+		clen  = c.N()
+		slen  = (c.Q().BitLen() + 7) / 8
 	)
-	if qlen%8 > 0 {
-		gammaLen = qlen/8 + 2
-	} else {
-		gammaLen = qlen/8 + 1
-	}
-	if n%8 > 0 {
-		clen = n/8 + 1
-	} else {
-		clen = n / 8
-	}
-
-	if len(data)*8 < gammaLen+clen*3 {
+	if len(pi) != ptlen+clen+slen {
 		err = errors.New("invalid proof length")
 		return
 	}
 
-	if gamma, err = c.Unmarshal(data[0:gammaLen]); err != nil {
+	if gamma, err = c.Unmarshal(pi[:ptlen]); err != nil {
 		return
 	}
 
-	C = new(big.Int).SetBytes(data[gammaLen : gammaLen+clen])
-	S = new(big.Int).SetBytes(data[gammaLen+clen:])
+	C = new(big.Int).SetBytes(pi[ptlen : ptlen+clen])
+	S = new(big.Int).SetBytes(pi[ptlen+clen:])
 	return
 }
 
 // https://tools.ietf.org/html/rfc6979#section-2.3.2
 func bits2int(in []byte, qlen int) *big.Int {
 	out := new(big.Int).SetBytes(in)
-	if ilen := len(in) * 8; ilen > qlen {
-		return out.Rsh(out, uint(ilen-qlen))
+	if inlen := len(in) * 8; inlen > qlen {
+		return out.Rsh(out, uint(inlen-qlen))
 	}
 	return out
 }
@@ -295,12 +305,4 @@ func bits2octets(in []byte, q *big.Int, rolen int) []byte {
 		return int2octets(z1, rolen)
 	}
 	return int2octets(z2, rolen)
-}
-
-func DefaultSqrt(c elliptic.Curve, s *big.Int) *big.Int {
-	var r big.Int
-	if nil == r.ModSqrt(s, c.Params().P) {
-		return nil // x is not a square
-	}
-	return &r
 }
