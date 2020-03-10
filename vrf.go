@@ -26,7 +26,7 @@ type VRF interface {
 // New creates and initializes a VRF object using customized config.
 func New(cfg *Config) VRF {
 	return &vrf{func(c elliptic.Curve) *core {
-		return &core{cfg, c}
+		return &core{Config: cfg, curve: c}
 	}}
 }
 
@@ -35,7 +35,7 @@ func NewSecp256k1Sha256Tai() VRF {
 	return New(&Config{
 		SuiteString: 0xfe,
 		Cofactor:    0x01,
-		Hasher:      sha256.New,
+		NewHasher:   sha256.New,
 		Y2: func(c elliptic.Curve, x *big.Int) *big.Int {
 			// y² = x³ + b
 			x3 := new(big.Int).Mul(x, x)
@@ -54,7 +54,7 @@ func NewP256Sha256Tai() VRF {
 	return New(&Config{
 		SuiteString: 0x01,
 		Cofactor:    0x01,
-		Hasher:      sha256.New,
+		NewHasher:   sha256.New,
 		Y2: func(c elliptic.Curve, x *big.Int) *big.Int {
 			// y² = x³ - 3x + b
 			x3 := new(big.Int).Mul(x, x)
@@ -99,7 +99,7 @@ func (v *vrf) Prove(sk *ecdsa.PrivateKey, alpha []byte) (beta, pi []byte, err er
 
 	// step 5: k = ECVRF_nonce_generation(SK, h_string)
 	// it follows RFC6979
-	k := core.GenerateNonce(sk.D, hbytes)
+	k := rfc6979nonce(sk.D, hbytes, core.Q(), core.NewHasher)
 	kbytes := k.Bytes()
 
 	// step 6: c = ECVRF_hash_points(H, Gamma, k*B, k*H)

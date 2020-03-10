@@ -8,6 +8,7 @@ import (
 	"crypto/elliptic"
 	"crypto/hmac"
 	"errors"
+	"hash"
 	"math/big"
 )
 
@@ -17,7 +18,8 @@ type point struct {
 
 type core struct {
 	*Config
-	curve elliptic.Curve
+	curve        elliptic.Curve
+	cachedHasher hash.Hash
 }
 
 // Q returns prime order of large prime order subgroup.
@@ -28,6 +30,14 @@ func (c *core) Q() *big.Int {
 // N return half of length, in octets, of a field element in F, rounded up to the nearest even integer
 func (c *core) N() int {
 	return ((c.curve.Params().P.BitLen()+1)/2 + 7) / 8
+}
+
+func (c *core) getCachedHasher() hash.Hash {
+	if c.cachedHasher != nil {
+		return c.cachedHasher
+	}
+	c.cachedHasher = c.NewHasher()
+	return c.cachedHasher
 }
 
 // Marshal marshals a point into compressed form specified in section 4.3.6 of ANSI X9.62.
@@ -108,25 +118,12 @@ func (c *core) Sub(pt1, pt2 *point) *point {
 	return &point{x, y}
 }
 
-func (c *core) Hash(data ...[]byte) []byte {
-	h := c.Hasher()
-	for _, e := range data {
-		h.Write(e)
-	}
-	return h.Sum(nil)
-}
-
-func (c *core) Mac(k []byte, m ...[]byte) []byte {
-	h := hmac.New(c.Hasher, k)
-	for _, e := range m {
-		h.Write(e)
-	}
-	return h.Sum(nil)
-}
-
 // HashToCurveTryAndIncrement takes in the VRF input `alpha` and converts it to H, using the try_and_increment algorithm.
 // See: [draft-irtf-cfrg-vrf-06 section 5.4.1.1](https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html#rfc.section.5.4.1.1).
 func (c *core) HashToCurveTryAndIncrement(pk *point, alpha []byte) (H *point, err error) {
+	hasher := c.getCachedHasher()
+	hash := make([]byte, 1+hasher.Size())
+	hash[0] = 2 // compress format
 
 	// step 1: ctr = 0
 	ctr := 0
@@ -135,17 +132,21 @@ func (c *core) HashToCurveTryAndIncrement(pk *point, alpha []byte) (H *point, er
 	pkBytes := c.Marshal(pk)
 
 	// step 3 ~ 6
+	prefix := []byte{c.SuiteString, 0x01}
+	suffix := []byte{0}
 	for ; ctr < 256; ctr++ {
 		// hash_string = Hash(suite_string || one_string || PK_string || alpha_string || ctr_string)
-		hash := c.Hash(
-			[]byte{c.SuiteString, 0x01},
-			pkBytes,
-			alpha,
-			[]byte{byte(ctr)},
-		)
+		suffix[0] = byte(ctr)
+		hasher.Reset()
+		hasher.Write(prefix)
+		hasher.Write(pkBytes)
+		hasher.Write(alpha)
+		hasher.Write(suffix)
+		// apppend right after compress format
+		hasher.Sum(hash[1:1])
 
 		// H = arbitrary_string_to_point(hash_string)
-		if H, err = c.Unmarshal(append([]byte{2}, hash...)); err == nil {
+		if H, err = c.Unmarshal(hash); err == nil {
 			if c.Cofactor > 1 {
 				// If H is not "INVALID" and cofactor > 1, set H = cofactor * H
 				H = c.ScalarMult(H, []byte{c.Cofactor})
@@ -156,88 +157,25 @@ func (c *core) HashToCurveTryAndIncrement(pk *point, alpha []byte) (H *point, er
 	return nil, errors.New("no valid point found")
 }
 
-// GenerateNonce generate nonce according to [RFC6979](https://tools.ietf.org/html/rfc6979).
-func (c *core) GenerateNonce(sk *big.Int, m []byte) *big.Int {
-	var (
-		q     = c.Q()
-		qlen  = q.BitLen()
-		rolen = (qlen + 7) / 8
-	)
-
-	// Step A
-	// Process m through the hash function H, yielding:
-	// h1 = H(m)
-	// (h1 is a sequence of hlen bits).
-	h1 := c.Hash(m)
-	hlen := len(h1)
-
-	bx := int2octets(sk, rolen)
-	bh := bits2octets(h1, q, rolen)
-
-	// Step B
-	// Set:
-	// V = 0x01 0x01 0x01 ... 0x01
-	v := bytes.Repeat([]byte{1}, hlen)
-
-	// Step C
-	// Set:
-	// K = 0x00 0x00 0x00 ... 0x00
-	k := make([]byte, hlen)
-
-	// Step D ~ G
-	for i := 0; i < 2; i++ {
-		// Set:
-		// K = HMAC_K(V || 0x00 || int2octets(x) || bits2octets(h1))
-		k = c.Mac(
-			k,
-			v,
-			[]byte{byte(i)}, // internal octet
-			bx,
-			bh,
-		)
-		// Set:
-		// V = HMAC_K(V)
-		v = c.Mac(k, v)
-	}
-
-	// Step H
-	for {
-		// Step H1
-		var t []byte
-
-		// Step H2
-		for len(t)*8 < qlen {
-			v = c.Mac(k, v)
-			t = append(t, v...)
-		}
-
-		// Step H3
-		secret := bits2int(t, qlen)
-		if secret.Sign() > 0 && secret.Cmp(q) < 0 {
-			return secret
-		}
-		k = c.Mac(k, append(v, 0x00))
-		v = c.Mac(k, v)
-	}
-}
-
 // See: [draft-irtf-cfrg-vrf-06 section 5.4.3](https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html#rfc.section.5.4.3)
 func (c *core) HashPoints(points ...*point) *big.Int {
-	v := []byte{c.SuiteString, 0x2}
-	for _, pt := range points {
-		v = append(v, c.Marshal(pt)...)
-	}
+	hasher := c.getCachedHasher()
+	hasher.Reset()
 
-	hash := c.Hash(v)
-	return bits2int(hash, c.N()*8)
+	hasher.Write([]byte{c.SuiteString, 0x2})
+	for _, pt := range points {
+		hasher.Write(c.Marshal(pt))
+	}
+	return bits2int(hasher.Sum(nil), c.N()*8)
 }
 
 func (c *core) GammaToHash(gamma *point) []byte {
 	gammaCof := c.ScalarMult(gamma, []byte{c.Cofactor})
-	return c.Hash(
-		[]byte{c.SuiteString, 0x03},
-		c.Marshal(gammaCof),
-	)
+	hasher := c.getCachedHasher()
+	hasher.Reset()
+	hasher.Write([]byte{c.SuiteString, 0x03})
+	hasher.Write(c.Marshal(gammaCof))
+	return hasher.Sum(nil)
 }
 
 func (c *core) EncodeProof(gamma *point, C, S *big.Int) []byte {
@@ -305,4 +243,86 @@ func bits2octets(in []byte, q *big.Int, rolen int) []byte {
 		return int2octets(z1, rolen)
 	}
 	return int2octets(z2, rolen)
+}
+
+// rfc6979nonce generates nonce according to [RFC6979](https://tools.ietf.org/html/rfc6979).
+func rfc6979nonce(
+	sk *big.Int,
+	m []byte,
+	q *big.Int,
+	newHasher func() hash.Hash,
+) *big.Int {
+	var (
+		qlen   = q.BitLen()
+		rolen  = (qlen + 7) / 8
+		hasher = newHasher()
+	)
+
+	// Step A
+	// Process m through the hash function H, yielding:
+	// h1 = H(m)
+	// (h1 is a sequence of hlen bits).
+	hasher.Write(m)
+	h1 := hasher.Sum(nil)
+	hlen := len(h1)
+
+	bx := int2octets(sk, rolen)
+	bh := bits2octets(h1, q, rolen)
+
+	// Step B
+	// Set:
+	// V = 0x01 0x01 0x01 ... 0x01
+	v := bytes.Repeat([]byte{1}, hlen)
+
+	// Step C
+	// Set:
+	// K = 0x00 0x00 0x00 ... 0x00
+	k := make([]byte, hlen)
+
+	// Step D ~ G
+	for i := 0; i < 2; i++ {
+		// Set:
+		// K = HMAC_K(V || 0x00 || int2octets(x) || bits2octets(h1))
+		mac := hmac.New(newHasher, k)
+		mac.Write(v)
+		mac.Write([]byte{byte(i)}) // internal octet
+		mac.Write(bx)
+		mac.Write(bh)
+		mac.Sum(k[:0])
+
+		// Set:
+		// V = HMAC_K(V)
+		mac = hmac.New(newHasher, k)
+		mac.Write(v)
+		mac.Sum(v[:0])
+	}
+
+	// Step H
+	for {
+		// Step H1
+		var t []byte
+
+		// Step H2
+		mac := hmac.New(newHasher, k)
+		for len(t)*8 < qlen {
+			mac.Write(v)
+			mac.Sum(v[:0])
+			mac.Reset()
+
+			t = append(t, v...)
+		}
+
+		// Step H3
+		secret := bits2int(t, qlen)
+		if secret.Sign() > 0 && secret.Cmp(q) < 0 {
+			return secret
+		}
+		mac.Write(v)
+		mac.Write([]byte{0x00})
+		mac.Sum(k[:0])
+
+		mac = hmac.New(newHasher, k)
+		mac.Write(v)
+		mac.Sum(v[:0])
+	}
 }

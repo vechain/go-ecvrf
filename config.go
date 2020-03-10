@@ -15,8 +15,8 @@ type Config struct {
 	SuiteString byte
 	// number of points on curve divided by group order.
 	Cofactor byte
-	// cryptographic hash function.
-	Hasher func() hash.Hash
+	// create cryptographic hash function.
+	NewHasher func() hash.Hash
 	// function to calculate y^2.
 	Y2 func(c elliptic.Curve, x *big.Int) *big.Int
 	// function to calculate square root.
