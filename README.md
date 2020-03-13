@@ -1,5 +1,3 @@
-## *DO NOT USE: It's an incomplete work-in-progress!!!*
-
 # go-ecvrf
 
 [![GoDoc Reference](https://godoc.org/github.com/vechain/go-ecvrf?status.svg)](https://pkg.go.dev/github.com/vechain/go-ecvrf)
