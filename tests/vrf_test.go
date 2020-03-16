@@ -4,16 +4,18 @@
 package tests
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"encoding/hex"
 	"encoding/json"
 	"io/ioutil"
-	"os"
-
 	"math/big"
+	"math/rand"
+	"os"
 	"reflect"
 	"testing"
+	"testing/quick"
 
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/vechain/go-ecvrf"
@@ -317,4 +319,74 @@ func Test_P256Sha256Tai_vrf_Verify(t *testing.T) {
 			}
 		})
 	}
+}
+
+type secp256k1gen struct {
+	sk    *ecdsa.PrivateKey
+	alpha []byte
+}
+
+func (secp256k1gen) Generate(rand *rand.Rand, size int) reflect.Value {
+	for {
+		sk, err := ecdsa.GenerateKey(btcec.S256(), rand)
+		if err != nil {
+			continue
+		}
+		alpha := make([]byte, rand.Intn(256))
+		rand.Read(alpha)
+		return reflect.ValueOf(secp256k1gen{sk, alpha})
+	}
+}
+
+type p256gen struct {
+	sk    *ecdsa.PrivateKey
+	alpha []byte
+}
+
+func (p256gen) Generate(rand *rand.Rand, size int) reflect.Value {
+	for {
+		sk, err := ecdsa.GenerateKey(elliptic.P256(), rand)
+		if err != nil {
+			continue
+		}
+		alpha := make([]byte, rand.Intn(256))
+		rand.Read(alpha)
+		return reflect.ValueOf(p256gen{sk, alpha})
+	}
+}
+
+func TestRandSkAndAlpha(t *testing.T) {
+	t.Run("secp256k1", func(t *testing.T) {
+		if err := quick.Check(func(gen secp256k1gen) bool {
+			vrf := ecvrf.NewSecp256k1Sha256Tai()
+			beta1, pi, err := vrf.Prove(gen.sk, gen.alpha)
+			if err != nil {
+				return false
+			}
+			beta2, err := vrf.Verify(&gen.sk.PublicKey, gen.alpha, pi)
+			if err != nil {
+				return false
+			}
+			return bytes.Compare(beta1, beta2) == 0
+		}, nil); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("p256", func(t *testing.T) {
+		if err := quick.Check(func(gen p256gen) bool {
+			vrf := ecvrf.NewP256Sha256Tai()
+			beta1, pi, err := vrf.Prove(gen.sk, gen.alpha)
+			if err != nil {
+				return false
+			}
+			beta2, err := vrf.Verify(&gen.sk.PublicKey, gen.alpha, pi)
+			if err != nil {
+				return false
+			}
+			return bytes.Compare(beta1, beta2) == 0
+		}, nil); err != nil {
+			t.Fatal(err)
+		}
+	})
 }
