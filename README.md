@@ -95,6 +95,28 @@ vrf := ecvrf.New(&ecvrf.Config{
 })
 ```
 
+# Benchmark
+
+On quad-core i5 13" macbook pro 2018 
+
+```
+goos: darwin
+goarch: amd64
+pkg: github.com/vechain/go-ecvrf/tests
+BenchmarkVRF
+BenchmarkVRF/secp256k1sha256tai-proving
+BenchmarkVRF/secp256k1sha256tai-proving-8         	    2198	    598180 ns/op	   16680 B/op	     604 allocs/op
+BenchmarkVRF/secp256k1sha256tai-verifying
+BenchmarkVRF/secp256k1sha256tai-verifying-8       	    1587	    739716 ns/op	   14214 B/op	     406 allocs/op
+BenchmarkVRF/p256sha256tai-proving
+BenchmarkVRF/p256sha256tai-proving-8              	    4887	    263843 ns/op	    9509 B/op	     243 allocs/op
+BenchmarkVRF/p256sha256tai-verifying
+BenchmarkVRF/p256sha256tai-verifying-8            	    3172	    507240 ns/op	   17636 B/op	     428 allocs/op
+PASS
+ok  	github.com/vechain/go-ecvrf/tests	5.668s
+Success: Benchmarks passed.
+```
+
 # References
 
 * [draft-irtf-cfrg-vrf-06](https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html)
