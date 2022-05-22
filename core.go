@@ -95,6 +95,9 @@ func (c *core) Unmarshal(in []byte) (*point, error) {
 }
 
 func (c *core) ScalarMult(pt *point, k []byte) *point {
+	if len(k) == 1 && k[0] == 1 {
+		return &point{new(big.Int).Set(pt.X), new(big.Int).Set(pt.Y)}
+	}
 	x, y := c.curve.ScalarMult(pt.X, pt.Y, k)
 	return &point{x, y}
 }
