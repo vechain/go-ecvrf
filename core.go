@@ -170,7 +170,10 @@ func (c *core) HashPoints(points ...*point) *big.Int {
 }
 
 func (c *core) GammaToHash(gamma *point) []byte {
-	gammaCof := c.ScalarMult(gamma, []byte{c.Cofactor})
+	gammaCof := gamma
+	if c.Cofactor != 1 {
+		gammaCof = c.ScalarMult(gamma, []byte{c.Cofactor})
+	}
 	hasher := c.getCachedHasher()
 	hasher.Reset()
 	hasher.Write([]byte{c.SuiteString, 0x03})
