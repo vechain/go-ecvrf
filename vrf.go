@@ -10,6 +10,8 @@ import (
 	"crypto/sha256"
 	"errors"
 	"math/big"
+
+	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 )
 
 // VRF is the interface that wraps VRF methods.
@@ -25,63 +27,67 @@ type VRF interface {
 
 // New creates and initializes a VRF object using customized config.
 func New(cfg *Config) VRF {
-	return &vrf{func(c elliptic.Curve) *core {
-		return &core{Config: cfg, curve: c}
-	}}
+	return &vrf{core{Config: cfg}}
 }
 
 // NewSecp256k1Sha256Tai creates the VRF object configured with secp256k1/SHA256 and hash_to_curve_try_and_increment algorithm.
 func NewSecp256k1Sha256Tai() VRF {
 	return New(&Config{
+		Curve:       secp256k1.S256(),
 		SuiteString: 0xfe,
 		Cofactor:    0x01,
 		NewHasher:   sha256.New,
-		Y2: func(c elliptic.Curve, x *big.Int) *big.Int {
-			// y² = x³ + b
-			x3 := new(big.Int).Mul(x, x)
-			x3.Mul(x3, x)
+		Decompress: func(c elliptic.Curve, pk []byte) (x, y *big.Int) {
+			var fx, fy secp256k1.FieldVal
+			// Reject unsupported public key formats for the given length.
+			format := pk[0]
+			switch format {
+			case secp256k1.PubKeyFormatCompressedEven, secp256k1.PubKeyFormatCompressedOdd:
+			default:
+				return
+			}
 
-			x3.Add(x3, c.Params().B)
-			x3.Mod(x3, c.Params().P)
-			return x3
+			// Parse the x coordinate while ensuring that it is in the allowed
+			// range.
+			if overflow := fx.SetByteSlice(pk[1:33]); overflow {
+				return
+			}
+
+			// Attempt to calculate the y coordinate for the given x coordinate such
+			// that the result pair is a point on the secp256k1 curve and the
+			// solution with desired oddness is chosen.
+			wantOddY := format == secp256k1.PubKeyFormatCompressedOdd
+			if !secp256k1.DecompressY(&fx, wantOddY, &fy) {
+				return
+			}
+			fy.Normalize()
+			return new(big.Int).SetBytes(fx.Bytes()[:]), new(big.Int).SetBytes(fy.Bytes()[:])
 		},
-		Sqrt: DefaultSqrt,
 	})
 }
 
 // NewP256Sha256Tai creates the VRF object configured with P256/SHA256 and hash_to_curve_try_and_increment algorithm.
 func NewP256Sha256Tai() VRF {
 	return New(&Config{
+		Curve:       elliptic.P256(),
 		SuiteString: 0x01,
 		Cofactor:    0x01,
 		NewHasher:   sha256.New,
-		Y2: func(c elliptic.Curve, x *big.Int) *big.Int {
-			// y² = x³ - 3x + b
-			x3 := new(big.Int).Mul(x, x)
-			x3.Mul(x3, x)
-
-			threeX := new(big.Int).Lsh(x, 1)
-			threeX.Add(threeX, x)
-
-			x3.Sub(x3, threeX)
-			x3.Add(x3, c.Params().B)
-			x3.Mod(x3, c.Params().P)
-			return x3
-		},
-		Sqrt: DefaultSqrt,
+		Decompress:  elliptic.UnmarshalCompressed,
 	})
 }
 
 type vrf struct {
-	newCore func(c elliptic.Curve) *core
+	core core
 }
 
 // Prove constructs VRF proof following [draft-irtf-cfrg-vrf-06 section 5.1](https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html#rfc.section.5.1).
 func (v *vrf) Prove(sk *ecdsa.PrivateKey, alpha []byte) (beta, pi []byte, err error) {
 	var (
-		core = v.newCore(sk.Curve)
+		core = &v.core
 		q    = core.Q()
 	)
+
 	// step 1 is done by the caller.
 
 	// step 2: H = ECVRF_hash_to_curve(suite_string, Y, alpha_string)
@@ -99,8 +105,8 @@ func (v *vrf) Prove(sk *ecdsa.PrivateKey, alpha []byte) (beta, pi []byte, err er
 
 	// step 5: k = ECVRF_nonce_generation(SK, h_string)
 	// it follows RFC6979
-	k := rfc6979nonce(sk.D, hbytes, core.Q(), core.NewHasher)
-	kbytes := k.Bytes()
+	kbytes := core.rfc6979nonce(sk.D, hbytes)
+	k := new(big.Int).SetBytes(kbytes)
 
 	// step 6: c = ECVRF_hash_points(H, Gamma, k*B, k*H)
 	kB := core.ScalarBaseMult(kbytes)
@@ -127,8 +133,7 @@ func (v *vrf) Prove(sk *ecdsa.PrivateKey, alpha []byte) (beta, pi []byte, err er
 
 // Verify checks the correctness of proof following [draft-irtf-cfrg-vrf-06 section 5.3](https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html#rfc.section.5.3).
 func (v *vrf) Verify(pk *ecdsa.PublicKey, alpha, pi []byte) (beta []byte, err error) {
-	core := v.newCore(pk.Curve)
-
+	core := &v.core
 	// step 1: D = ECVRF_decode_proof(pi_string)
 	gamma, c, s, err := core.DecodeProof(pi)
 
