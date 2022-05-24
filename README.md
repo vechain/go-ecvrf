@@ -35,7 +35,7 @@ Using SECP256K1_SHA256_TAI cipher suite:
 
     // `beta`: the VRF hash output
     // `pi`: the VRF proof
-    beta, pi, err := ecvrf.NewSecp256k1Sha256Tai().Prove(sk, []byte(alpha))
+    beta, pi, err := ecvrf.Secp256k1Sha256Tai.Prove(sk, []byte(alpha))
     if err != nil {
         // something wrong.
         // most likely sk is not properly loaded.
@@ -55,7 +55,7 @@ Using SECP256K1_SHA256_TAI cipher suite:
     alpha := "Hello VeChain"
 
     // `pi` is the VRF proof
-    beta, err := ecvrf.NewSecp256k1Sha256Tai().Verify(pk, []byte(alpha), pi)
+    beta, err := ecvrf.Secp256k1Sha256Tai.Verify(pk, []byte(alpha), pi)
     if err != nil {
         // invalid proof
         return

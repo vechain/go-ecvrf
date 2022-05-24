@@ -82,7 +82,7 @@ func Test_Secp256K1Sha256Tai_vrf_Prove(t *testing.T) {
 		})
 	}
 
-	vrf := NewSecp256k1Sha256Tai()
+	vrf := Secp256k1Sha256Tai
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -138,7 +138,7 @@ func Test_Secp256K1Sha256Tai_vrf_Verify(t *testing.T) {
 		})
 	}
 
-	vrf := NewSecp256k1Sha256Tai()
+	vrf := Secp256k1Sha256Tai
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -191,7 +191,7 @@ func Test_Secp256K1Sha256Tai_vrf_Verify_bad_message(t *testing.T) {
 		true,
 	}
 
-	vrf := NewSecp256k1Sha256Tai()
+	vrf := Secp256k1Sha256Tai
 
 	t.Run(tt.name, func(t *testing.T) {
 		v := vrf
@@ -244,7 +244,7 @@ func Test_P256Sha256Tai_vrf_Prove(t *testing.T) {
 		})
 	}
 
-	vrf := NewP256Sha256Tai()
+	vrf := P256Sha256Tai
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -303,7 +303,7 @@ func Test_P256Sha256Tai_vrf_Verify(t *testing.T) {
 		})
 	}
 
-	vrf := NewP256Sha256Tai()
+	vrf := P256Sha256Tai
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -357,7 +357,7 @@ func (p256gen) Generate(rand *rand.Rand, size int) reflect.Value {
 func TestRandSkAndAlpha(t *testing.T) {
 	t.Run("secp256k1", func(t *testing.T) {
 		if err := quick.Check(func(gen secp256k1gen) bool {
-			vrf := NewSecp256k1Sha256Tai()
+			vrf := Secp256k1Sha256Tai
 			beta1, pi, err := vrf.Prove(gen.sk, gen.alpha)
 			if err != nil {
 				return false
@@ -374,7 +374,7 @@ func TestRandSkAndAlpha(t *testing.T) {
 
 	t.Run("p256", func(t *testing.T) {
 		if err := quick.Check(func(gen p256gen) bool {
-			vrf := NewP256Sha256Tai()
+			vrf := P256Sha256Tai
 			beta1, pi, err := vrf.Prove(gen.sk, gen.alpha)
 			if err != nil {
 				return false
@@ -398,7 +398,7 @@ func BenchmarkVRF(b *testing.B) {
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			_, _, err := NewSecp256k1Sha256Tai().Prove(esk, alpha)
+			_, _, err := Secp256k1Sha256Tai.Prove(esk, alpha)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -409,10 +409,10 @@ func BenchmarkVRF(b *testing.B) {
 		esk := sk.ToECDSA()
 		alpha := []byte("Hello VeChain")
 
-		_, pi, _ := NewSecp256k1Sha256Tai().Prove(esk, alpha)
+		_, pi, _ := Secp256k1Sha256Tai.Prove(esk, alpha)
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			_, err := NewSecp256k1Sha256Tai().Verify(&esk.PublicKey, alpha, pi)
+			_, err := Secp256k1Sha256Tai.Verify(&esk.PublicKey, alpha, pi)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -423,7 +423,7 @@ func BenchmarkVRF(b *testing.B) {
 		alpha := []byte("Hello VeChain")
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			_, _, err := NewP256Sha256Tai().Prove(sk, alpha)
+			_, _, err := P256Sha256Tai.Prove(sk, alpha)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -433,10 +433,10 @@ func BenchmarkVRF(b *testing.B) {
 		sk, _ := ecdsa.GenerateKey(elliptic.P256(), rand.New(rand.NewSource(1)))
 		alpha := []byte("Hello VeChain")
 
-		_, pi, _ := NewP256Sha256Tai().Prove(sk, alpha)
+		_, pi, _ := P256Sha256Tai.Prove(sk, alpha)
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			_, err := NewP256Sha256Tai().Verify(&sk.PublicKey, alpha, pi)
+			_, err := P256Sha256Tai.Verify(&sk.PublicKey, alpha, pi)
 			if err != nil {
 				b.Fatal(err)
 			}

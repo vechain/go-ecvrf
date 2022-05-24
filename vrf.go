@@ -25,14 +25,9 @@ type VRF interface {
 	Verify(pk *ecdsa.PublicKey, alpha, pi []byte) (beta []byte, err error)
 }
 
-// New creates and initializes a VRF object using customized config.
-func New(cfg *Config) VRF {
-	return &vrf{core{Config: cfg}}
-}
-
-// NewSecp256k1Sha256Tai creates the VRF object configured with secp256k1/SHA256 and hash_to_curve_try_and_increment algorithm.
-func NewSecp256k1Sha256Tai() VRF {
-	return New(&Config{
+var (
+	// Secp256k1Sha256Tai is the pre-configured VRF object with secp256k1/SHA256 and hash_to_curve_try_and_increment algorithm.
+	Secp256k1Sha256Tai = New(&Config{
 		Curve:       secp256k1.S256(),
 		SuiteString: 0xfe,
 		Cofactor:    0x01,
@@ -64,27 +59,29 @@ func NewSecp256k1Sha256Tai() VRF {
 			return new(big.Int).SetBytes(fx.Bytes()[:]), new(big.Int).SetBytes(fy.Bytes()[:])
 		},
 	})
-}
-
-// NewP256Sha256Tai creates the VRF object configured with P256/SHA256 and hash_to_curve_try_and_increment algorithm.
-func NewP256Sha256Tai() VRF {
-	return New(&Config{
+	// P256Sha256Tai is the pre-configured VRF object with P256/SHA256 and hash_to_curve_try_and_increment algorithm.
+	P256Sha256Tai = New(&Config{
 		Curve:       elliptic.P256(),
 		SuiteString: 0x01,
 		Cofactor:    0x01,
 		NewHasher:   sha256.New,
 		Decompress:  elliptic.UnmarshalCompressed,
 	})
+)
+
+// New creates and initializes a VRF object using customized config.
+func New(cfg *Config) VRF {
+	return &vrf{cfg: *cfg}
 }
 
 type vrf struct {
-	core core
+	cfg Config
 }
 
 // Prove constructs VRF proof following [draft-irtf-cfrg-vrf-06 section 5.1](https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html#rfc.section.5.1).
 func (v *vrf) Prove(sk *ecdsa.PrivateKey, alpha []byte) (beta, pi []byte, err error) {
 	var (
-		core = &v.core
+		core = core{Config: &v.cfg}
 		q    = core.Q()
 	)
 
@@ -133,7 +130,7 @@ func (v *vrf) Prove(sk *ecdsa.PrivateKey, alpha []byte) (beta, pi []byte, err er
 
 // Verify checks the correctness of proof following [draft-irtf-cfrg-vrf-06 section 5.3](https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html#rfc.section.5.3).
 func (v *vrf) Verify(pk *ecdsa.PublicKey, alpha, pi []byte) (beta []byte, err error) {
-	core := &v.core
+	core := core{Config: &v.cfg}
 	// step 1: D = ECVRF_decode_proof(pi_string)
 	gamma, c, s, err := core.DecodeProof(pi)
 
