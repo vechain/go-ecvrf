@@ -4,7 +4,7 @@
 [![Travis](https://travis-ci.org/vechain/go-ecvrf.svg?branch=master)](https://travis-ci.org/vechain/go-ecvrf)
 [![License](https://img.shields.io/github/license/vechain/go-ecvrf)](https://github.com/vechain/go-ecvrf/blob/master/LICENSE)
 
-Zero-dependency Golang implementation of Elliptic Curve Verifiable Random Function (VRF) follows [draft-irtf-cfrg-vrf-06](https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html) and [RFC 6979](https://tools.ietf.org/html/rfc6979).
+Golang implementation of Elliptic Curve Verifiable Random Function (VRF) follows [draft-irtf-cfrg-vrf-06](https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html) and [RFC 6979](https://tools.ietf.org/html/rfc6979).
 
 # What's VRF
 
@@ -35,7 +35,7 @@ Using SECP256K1_SHA256_TAI cipher suite:
 
     // `beta`: the VRF hash output
     // `pi`: the VRF proof
-    beta, pi, err := ecvrf.NewSecp256k1Sha256Tai().Prove(sk, []byte(alpha))
+    beta, pi, err := ecvrf.Secp256k1Sha256Tai.Prove(sk, []byte(alpha))
     if err != nil {
         // something wrong.
         // most likely sk is not properly loaded.
@@ -55,7 +55,7 @@ Using SECP256K1_SHA256_TAI cipher suite:
     alpha := "Hello VeChain"
 
     // `pi` is the VRF proof
-    beta, err := ecvrf.NewSecp256k1Sha256Tai().Verify(pk, []byte(alpha), pi)
+    beta, err := ecvrf.Secp256k1Sha256Tai.Verify(pk, []byte(alpha), pi)
     if err != nil {
         // invalid proof
         return
@@ -75,46 +75,28 @@ It's easy to extends this library to use different Weierstrass curves and Hash a
 ```golang
 // the following codes build a new P256_SHA256_TAI VRF object.
 vrf := ecvrf.New(&ecvrf.Config{
+    Curve:       elliptic.P256(),
     SuiteString: 0x01,
     Cofactor:    0x01,
     NewHasher:   sha256.New,
-    Y2: func(c elliptic.Curve, x *big.Int) *big.Int {
-        // y² = x³ - 3x + b
-        x3 := new(big.Int).Mul(x, x)
-        x3.Mul(x3, x)
-
-        threeX := new(big.Int).Lsh(x, 1)
-        threeX.Add(threeX, x)
-
-        x3.Sub(x3, threeX)
-        x3.Add(x3, c.Params().B)
-        x3.Mod(x3, c.Params().P)
-        return x3
-    },
-    Sqrt: ecvrf.DefaultSqrt,
+    Decompress: elliptic.UnmarshalCompressed,
 })
 ```
 
 # Benchmark
 
-On quad-core i5 13" macbook pro 2018 
-
-```
-goos: darwin
+```bash
+$ go test -benchmem -run=^$ -bench ^BenchmarkVRF$ github.com/vechain/go-ecvrf -benchtime=5s
+goos: linux
 goarch: amd64
-pkg: github.com/vechain/go-ecvrf/tests
-BenchmarkVRF
-BenchmarkVRF/secp256k1sha256tai-proving
-BenchmarkVRF/secp256k1sha256tai-proving-8         	    2198	    598180 ns/op	   16680 B/op	     604 allocs/op
-BenchmarkVRF/secp256k1sha256tai-verifying
-BenchmarkVRF/secp256k1sha256tai-verifying-8       	    1587	    739716 ns/op	   14214 B/op	     406 allocs/op
-BenchmarkVRF/p256sha256tai-proving
-BenchmarkVRF/p256sha256tai-proving-8              	    4887	    263843 ns/op	    9509 B/op	     243 allocs/op
-BenchmarkVRF/p256sha256tai-verifying
-BenchmarkVRF/p256sha256tai-verifying-8            	    3172	    507240 ns/op	   17636 B/op	     428 allocs/op
+pkg: github.com/vechain/go-ecvrf
+cpu: Intel(R) Core(TM) i7-6700 CPU @ 3.40GHz
+BenchmarkVRF/secp256k1sha256tai-proving-8         	   22207	    279600 ns/op	    4881 B/op	      95 allocs/op
+BenchmarkVRF/secp256k1sha256tai-verifying-8       	   15150	    399938 ns/op	    5009 B/op	     114 allocs/op
+BenchmarkVRF/p256sha256tai-proving-8              	   31328	    193911 ns/op	    9083 B/op	     294 allocs/op
+BenchmarkVRF/p256sha256tai-verifying-8            	   19875	    300613 ns/op	   19472 B/op	     515 allocs/op
 PASS
-ok  	github.com/vechain/go-ecvrf/tests	5.668s
-Success: Benchmarks passed.
+ok  	github.com/vechain/go-ecvrf	36.060s
 ```
 
 # References
