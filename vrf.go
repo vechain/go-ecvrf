@@ -76,6 +76,18 @@ var (
 
 // New creates and initializes a VRF object using customized config.
 func New(cfg *Config) VRF {
+	if cfg == nil {
+		panic("config cannot be nil")
+	}
+	if cfg.Curve == nil {
+		panic("config.Curve cannot be nil")
+	}
+	if cfg.NewHasher == nil {
+		panic("config.NewHasher cannot be nil")
+	}
+	if cfg.Decompress == nil {
+		panic("config.Decompress cannot be nil")
+	}
 	return &vrf{cfg: *cfg}
 }
 
@@ -85,6 +97,12 @@ type vrf struct {
 
 // Prove constructs VRF proof following [draft-irtf-cfrg-vrf-06 section 5.1](https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html#rfc.section.5.1).
 func (v *vrf) Prove(sk *ecdsa.PrivateKey, alpha []byte) (beta, pi []byte, err error) {
+	// Validate input parameters to prevent nil pointer dereference
+	if sk == nil || sk.D == nil || sk.X == nil || sk.Y == nil {
+		err = errors.New("private key and its fields (D, X, Y) cannot be nil")
+		return
+	}
+
 	var (
 		core = core{Config: &v.cfg}
 		q    = core.Q()
@@ -135,6 +153,12 @@ func (v *vrf) Prove(sk *ecdsa.PrivateKey, alpha []byte) (beta, pi []byte, err er
 
 // Verify checks the correctness of proof following [draft-irtf-cfrg-vrf-06 section 5.3](https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html#rfc.section.5.3).
 func (v *vrf) Verify(pk *ecdsa.PublicKey, alpha, pi []byte) (beta []byte, err error) {
+	// Validate input parameters to prevent nil pointer dereference
+	if pk == nil || pk.X == nil || pk.Y == nil {
+		err = errors.New("public key and its fields (X, Y) cannot be nil")
+		return
+	}
+
 	core := core{Config: &v.cfg}
 	// step 1: D = ECVRF_decode_proof(pi_string)
 	gamma, c, s, err := core.DecodeProof(pi)

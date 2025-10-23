@@ -443,3 +443,125 @@ func BenchmarkVRF(b *testing.B) {
 		}
 	})
 }
+
+// TestNilParameterHandling tests that the VRF functions properly handle nil parameters
+func TestNilParameterHandling(t *testing.T) {
+	t.Run("Prove with nil private key", func(t *testing.T) {
+		vrf := Secp256k1Sha256Tai
+		alpha := []byte("test")
+		_, _, err := vrf.Prove(nil, alpha)
+		if err == nil {
+			t.Error("Expected error when private key is nil, got nil")
+		}
+		expectedMsg := "private key and its fields (D, X, Y) cannot be nil"
+		if err.Error() != expectedMsg {
+			t.Errorf("Expected '%s', got '%s'", expectedMsg, err.Error())
+		}
+	})
+
+	t.Run("Prove with nil D field", func(t *testing.T) {
+		vrf := Secp256k1Sha256Tai
+		alpha := []byte("test")
+		sk := &ecdsa.PrivateKey{
+			PublicKey: ecdsa.PublicKey{
+				Curve: secp256k1.S256(),
+				X:     big.NewInt(1),
+				Y:     big.NewInt(1),
+			},
+			D: nil, // nil D field
+		}
+		_, _, err := vrf.Prove(sk, alpha)
+		if err == nil {
+			t.Error("Expected error when private key D is nil, got nil")
+		}
+		expectedMsg := "private key and its fields (D, X, Y) cannot be nil"
+		if err.Error() != expectedMsg {
+			t.Errorf("Expected '%s', got '%s'", expectedMsg, err.Error())
+		}
+	})
+
+	t.Run("Prove with nil X or Y", func(t *testing.T) {
+		vrf := Secp256k1Sha256Tai
+		alpha := []byte("test")
+		sk := &ecdsa.PrivateKey{
+			PublicKey: ecdsa.PublicKey{
+				Curve: secp256k1.S256(),
+				X:     nil, // nil X
+				Y:     big.NewInt(1),
+			},
+			D: big.NewInt(1),
+		}
+		_, _, err := vrf.Prove(sk, alpha)
+		if err == nil {
+			t.Error("Expected error when private key X is nil, got nil")
+		}
+		expectedMsg := "private key and its fields (D, X, Y) cannot be nil"
+		if err.Error() != expectedMsg {
+			t.Errorf("Expected '%s', got '%s'", expectedMsg, err.Error())
+		}
+	})
+
+	t.Run("Verify with nil public key", func(t *testing.T) {
+		vrf := Secp256k1Sha256Tai
+		alpha := []byte("test")
+		pi := []byte("fake proof")
+		_, err := vrf.Verify(nil, alpha, pi)
+		if err == nil {
+			t.Error("Expected error when public key is nil, got nil")
+		}
+		expectedMsg := "public key and its fields (X, Y) cannot be nil"
+		if err.Error() != expectedMsg {
+			t.Errorf("Expected '%s', got '%s'", expectedMsg, err.Error())
+		}
+	})
+
+	t.Run("Verify with nil X or Y", func(t *testing.T) {
+		vrf := Secp256k1Sha256Tai
+		alpha := []byte("test")
+		pi := []byte("fake proof")
+		pk := &ecdsa.PublicKey{
+			Curve: secp256k1.S256(),
+			X:     nil, // nil X
+			Y:     big.NewInt(1),
+		}
+		_, err := vrf.Verify(pk, alpha, pi)
+		if err == nil {
+			t.Error("Expected error when public key X is nil, got nil")
+		}
+		expectedMsg := "public key and its fields (X, Y) cannot be nil"
+		if err.Error() != expectedMsg {
+			t.Errorf("Expected '%s', got '%s'", expectedMsg, err.Error())
+		}
+	})
+}
+
+// TestNewWithNilConfig tests that New panics with nil or invalid config
+func TestNewWithNilConfig(t *testing.T) {
+	t.Run("New with nil config", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("Expected panic when config is nil, got no panic")
+			} else if r != "config cannot be nil" {
+				t.Errorf("Expected panic 'config cannot be nil', got '%v'", r)
+			}
+		}()
+		New(nil)
+	})
+
+	t.Run("New with nil Curve", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("Expected panic when config.Curve is nil, got no panic")
+			} else if r != "config.Curve cannot be nil" {
+				t.Errorf("Expected panic 'config.Curve cannot be nil', got '%v'", r)
+			}
+		}()
+		New(&Config{
+			Curve:       nil,
+			SuiteString: 0xfe,
+			Cofactor:    0x01,
+			NewHasher:   nil,
+			Decompress:  nil,
+		})
+	})
+}
