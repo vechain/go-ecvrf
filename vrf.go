@@ -33,8 +33,13 @@ var (
 		Cofactor:    0x01,
 		NewHasher:   sha256.New,
 		Decompress: func(c elliptic.Curve, pk []byte) (x, y *big.Int) {
+			// Check if we have enough bytes for the compressed public key format
+			// Compressed format: 1 byte prefix + 32 bytes x coordinate = 33 bytes total
+			if len(pk) != 33 {
+				return
+			}
+
 			var fx, fy secp256k1.FieldVal
-			// Reject unsupported public key formats for the given length.
 			format := pk[0]
 			switch format {
 			case secp256k1.PubKeyFormatCompressedEven, secp256k1.PubKeyFormatCompressedOdd:
