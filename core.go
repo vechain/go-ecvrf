@@ -152,9 +152,10 @@ func (c *core) EncodeProof(gamma *point, C, S *big.Int) []byte {
 // See: [draft-irtf-cfrg-vrf-06 section 5.4.4](https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html#rfc.section.5.4.4)
 func (c *core) DecodeProof(pi []byte) (gamma *point, C, S *big.Int, err error) {
 	var (
+		q     = c.Q()
 		ptlen = (c.Curve.Params().BitSize+7)/8 + 1
 		clen  = c.N()
-		slen  = (c.Q().BitLen() + 7) / 8
+		slen  = (q.BitLen() + 7) / 8
 	)
 	if len(pi) != ptlen+clen+slen {
 		err = errors.New("invalid proof length")
@@ -168,6 +169,22 @@ func (c *core) DecodeProof(pi []byte) (gamma *point, C, S *big.Int, err error) {
 
 	C = new(big.Int).SetBytes(pi[ptlen : ptlen+clen])
 	S = new(big.Int).SetBytes(pi[ptlen+clen:])
+
+	if C.Sign() == 0 {
+		err = errors.New("invalid proof: value c is zero")
+		return
+	}
+	if S.Sign() == 0 {
+		err = errors.New("invalid proof: value s is zero")
+		return
+	}
+
+	// s = (k + c*x) mod q
+	if S.Cmp(q) >= 0 {
+		err = errors.New("invalid proof: s value out of range (>= curve order)")
+		return
+	}
+
 	return
 }
 
