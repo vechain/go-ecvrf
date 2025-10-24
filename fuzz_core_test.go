@@ -1,7 +1,6 @@
 package ecvrf
 
 import (
-	"crypto/elliptic"
 	"testing"
 )
 
@@ -59,7 +58,7 @@ func FuzzHashToCurveTryAndIncrementSecp256k1(f *testing.F) {
 			// No guarantee that a valid point is found for all inputs; just ensure no panic.
 			return
 		}
-		if !c.Curve.IsOnCurve(H.X, H.Y) {
+		if c.Unmarshal(c.Marshal(H)) == nil {
 			t.Fatalf("returned point is not on curve")
 		}
 	})
@@ -73,7 +72,6 @@ func FuzzHashToCurveTryAndIncrementP256(f *testing.F) {
 		if len(skSeed) == 0 {
 			t.Skip()
 		}
-		curve := elliptic.P256()
 		temp := P256Sha256Tai.(*vrf)
 		c := &core{Config: &temp.cfg}
 
@@ -86,7 +84,7 @@ func FuzzHashToCurveTryAndIncrementP256(f *testing.F) {
 		if err != nil {
 			return
 		}
-		if !curve.IsOnCurve(H.X, H.Y) {
+		if c.Unmarshal(c.Marshal(H)) == nil {
 			t.Fatalf("returned point is not on curve")
 		}
 	})
