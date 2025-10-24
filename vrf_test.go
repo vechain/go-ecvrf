@@ -565,3 +565,32 @@ func TestNewWithNilConfig(t *testing.T) {
 		})
 	})
 }
+
+func FuzzSecp256k1Sha256TaiProve(f *testing.F) {
+	sk, _ := secp256k1.GeneratePrivateKey()
+
+	f.Fuzz(func(t *testing.T, input []byte) {
+		Secp256k1Sha256Tai.Prove(sk.ToECDSA(), input)
+	})
+}
+
+func FuzzSecp256k1Sha256TaiVerify(f *testing.F) {
+	sk, _ := secp256k1.GeneratePrivateKey()
+	f.Fuzz(func(t *testing.T, alpha []byte, pi []byte) {
+		Secp256k1Sha256Tai.Verify(&sk.ToECDSA().PublicKey, alpha, pi)
+	})
+}
+
+func FuzzP256Sha256TaiProve(f *testing.F) {
+	sk, _ := ecdsa.GenerateKey(elliptic.P256(), rand.New(rand.NewSource(1)))
+	f.Fuzz(func(t *testing.T, input []byte) {
+		P256Sha256Tai.Prove(sk, input)
+	})
+}
+
+func FuzzP256Sha256TaiVerify(f *testing.F) {
+	sk, _ := ecdsa.GenerateKey(elliptic.P256(), rand.New(rand.NewSource(1)))
+	f.Fuzz(func(t *testing.T, alpha []byte, pi []byte) {
+		P256Sha256Tai.Verify(&sk.PublicKey, alpha, pi)
+	})
+}
