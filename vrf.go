@@ -159,6 +159,11 @@ func (v *vrf) Verify(pk *ecdsa.PublicKey, alpha, pi []byte) (beta []byte, err er
 		return
 	}
 
+	if !v.cfg.Curve.IsOnCurve(pk.X, pk.Y) {
+		err = errors.New("public key is not on curve")
+		return
+	}
+
 	core := core{Config: &v.cfg}
 	// step 1: D = ECVRF_decode_proof(pi_string)
 	gamma, c, s, err := core.DecodeProof(pi)
