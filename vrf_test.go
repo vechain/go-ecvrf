@@ -565,3 +565,53 @@ func TestNewWithNilConfig(t *testing.T) {
 		})
 	})
 }
+
+func TestVerifyPublicKeyOnCurveValidation(t *testing.T) {
+	t.Run("secp256k1 - pk not on curve", func(t *testing.T) {
+		vrf := Secp256k1Sha256Tai
+
+		sk, _ := secp256k1.GeneratePrivateKey()
+		validPk := sk.PubKey().ToECDSA()
+
+		p := secp256k1.S256().Params().P
+		badY := new(big.Int).Mod(new(big.Int).Add(validPk.Y, big.NewInt(1)), p)
+
+		pk := &ecdsa.PublicKey{
+			Curve: secp256k1.S256(),
+			X:     validPk.X,
+			Y:     badY,
+		}
+
+		_, err := vrf.Verify(pk, []byte("test"), []byte("fake proof"))
+		if err == nil {
+			t.Fatal("expected error for public key not on curve, got nil")
+		}
+		if err.Error() != "public key is not on curve" {
+			t.Fatalf("expected 'public key is not on curve', got %q", err.Error())
+		}
+	})
+
+	t.Run("p256 - pk not on curve", func(t *testing.T) {
+		vrf := P256Sha256Tai
+
+		curve := elliptic.P256()
+		sk, _ := ecdsa.GenerateKey(curve, rand.New(rand.NewSource(1)))
+
+		p := curve.Params().P
+		badY := new(big.Int).Mod(new(big.Int).Add(sk.PublicKey.Y, big.NewInt(1)), p)
+
+		pk := &ecdsa.PublicKey{
+			Curve: curve,
+			X:     sk.PublicKey.X,
+			Y:     badY,
+		}
+
+		_, err := vrf.Verify(pk, []byte("test"), []byte("fake proof"))
+		if err == nil {
+			t.Fatal("expected error for public key not on curve, got nil")
+		}
+		if err.Error() != "public key is not on curve" {
+			t.Fatalf("expected 'public key is not on curve', got %q", err.Error())
+		}
+	})
+}
