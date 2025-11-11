@@ -615,3 +615,36 @@ func TestVerifyPublicKeyOnCurveValidation(t *testing.T) {
 		}
 	})
 }
+
+func TestVerifyPublicKeyCurveMismatch(t *testing.T) {
+	t.Run("secp256k1 vrf with p256 public key", func(t *testing.T) {
+		vrf := Secp256k1Sha256Tai
+
+		curve := elliptic.P256()
+		sk, _ := ecdsa.GenerateKey(curve, rand.New(rand.NewSource(7)))
+		pk := &sk.PublicKey
+
+		_, err := vrf.Verify(pk, []byte("test"), []byte("fake proof"))
+		if err == nil {
+			t.Fatal("expected error for curve mismatch, got nil")
+		}
+		if err.Error() != "public key curve does not match config curve" {
+			t.Fatalf("expected 'public key curve does not match config curve', got %q", err.Error())
+		}
+	})
+
+	t.Run("p256 vrf with secp256k1 public key", func(t *testing.T) {
+		vrf := P256Sha256Tai
+
+		sk, _ := secp256k1.GeneratePrivateKey()
+		pk := &sk.ToECDSA().PublicKey
+
+		_, err := vrf.Verify(pk, []byte("test"), []byte("fake proof"))
+		if err == nil {
+			t.Fatal("expected error for curve mismatch, got nil")
+		}
+		if err.Error() != "public key curve does not match config curve" {
+			t.Fatalf("expected 'public key curve does not match config curve', got %q", err.Error())
+		}
+	})
+}
