@@ -480,7 +480,7 @@ func TestNilParameterHandling(t *testing.T) {
 		}
 	})
 
-	t.Run("Prove with nil X or Y", func(t *testing.T) {
+	t.Run("Prove with nil X", func(t *testing.T) {
 		vrf := Secp256k1Sha256Tai
 		alpha := []byte("test")
 		sk := &ecdsa.PrivateKey{
@@ -494,6 +494,27 @@ func TestNilParameterHandling(t *testing.T) {
 		_, _, err := vrf.Prove(sk, alpha)
 		if err == nil {
 			t.Error("Expected error when private key X is nil, got nil")
+		}
+		expectedMsg := "private key and its fields (D, X, Y) cannot be nil"
+		if err.Error() != expectedMsg {
+			t.Errorf("Expected '%s', got '%s'", expectedMsg, err.Error())
+		}
+	})
+
+	t.Run("Prove with nil Y", func(t *testing.T) {
+		vrf := Secp256k1Sha256Tai
+		alpha := []byte("test")
+		sk := &ecdsa.PrivateKey{
+			PublicKey: ecdsa.PublicKey{
+				Curve: secp256k1.S256(),
+				X:     big.NewInt(1),
+				Y:     nil, // nil Y
+			},
+			D: big.NewInt(1),
+		}
+		_, _, err := vrf.Prove(sk, alpha)
+		if err == nil {
+			t.Error("Expected error when private key Y is nil, got nil")
 		}
 		expectedMsg := "private key and its fields (D, X, Y) cannot be nil"
 		if err.Error() != expectedMsg {
@@ -645,6 +666,93 @@ func TestVerifyPublicKeyCurveMismatch(t *testing.T) {
 		}
 		if err.Error() != "public key curve does not match config curve" {
 			t.Fatalf("expected 'public key curve does not match config curve', got %q", err.Error())
+		}
+	})
+}
+
+// TestProvePublicKeyValidation tests that Prove method properly validates public key through validatePublicKey
+func TestProvePublicKeyValidation(t *testing.T) {
+	t.Run("Prove with curve mismatch - secp256k1 vrf with p256 private key", func(t *testing.T) {
+		vrf := Secp256k1Sha256Tai
+
+		curve := elliptic.P256()
+		sk, _ := ecdsa.GenerateKey(curve, rand.New(rand.NewSource(7)))
+
+		_, _, err := vrf.Prove(sk, []byte("test"))
+		if err == nil {
+			t.Fatal("expected error for curve mismatch, got nil")
+		}
+		if err.Error() != "public key curve does not match config curve" {
+			t.Fatalf("expected 'public key curve does not match config curve', got %q", err.Error())
+		}
+	})
+
+	t.Run("Prove with curve mismatch - p256 vrf with secp256k1 private key", func(t *testing.T) {
+		vrf := P256Sha256Tai
+
+		sk, _ := secp256k1.GeneratePrivateKey()
+		ecdsaSk := sk.ToECDSA()
+
+		_, _, err := vrf.Prove(ecdsaSk, []byte("test"))
+		if err == nil {
+			t.Fatal("expected error for curve mismatch, got nil")
+		}
+		if err.Error() != "public key curve does not match config curve" {
+			t.Fatalf("expected 'public key curve does not match config curve', got %q", err.Error())
+		}
+	})
+
+	t.Run("Prove with public key not on curve - secp256k1", func(t *testing.T) {
+		vrf := Secp256k1Sha256Tai
+
+		sk, _ := secp256k1.GeneratePrivateKey()
+		validSk := sk.ToECDSA()
+
+		p := secp256k1.S256().Params().P
+		badY := new(big.Int).Mod(new(big.Int).Add(validSk.Y, big.NewInt(1)), p)
+
+		badSk := &ecdsa.PrivateKey{
+			PublicKey: ecdsa.PublicKey{
+				Curve: secp256k1.S256(),
+				X:     validSk.X,
+				Y:     badY,
+			},
+			D: validSk.D,
+		}
+
+		_, _, err := vrf.Prove(badSk, []byte("test"))
+		if err == nil {
+			t.Fatal("expected error for public key not on curve, got nil")
+		}
+		if err.Error() != "public key is not on curve" {
+			t.Fatalf("expected 'public key is not on curve', got %q", err.Error())
+		}
+	})
+
+	t.Run("Prove with public key not on curve - p256", func(t *testing.T) {
+		vrf := P256Sha256Tai
+
+		curve := elliptic.P256()
+		sk, _ := ecdsa.GenerateKey(curve, rand.New(rand.NewSource(1)))
+
+		p := curve.Params().P
+		badY := new(big.Int).Mod(new(big.Int).Add(sk.PublicKey.Y, big.NewInt(1)), p)
+
+		badSk := &ecdsa.PrivateKey{
+			PublicKey: ecdsa.PublicKey{
+				Curve: curve,
+				X:     sk.PublicKey.X,
+				Y:     badY,
+			},
+			D: sk.D,
+		}
+
+		_, _, err := vrf.Prove(badSk, []byte("test"))
+		if err == nil {
+			t.Fatal("expected error for public key not on curve, got nil")
+		}
+		if err.Error() != "public key is not on curve" {
+			t.Fatalf("expected 'public key is not on curve', got %q", err.Error())
 		}
 	})
 }

@@ -103,6 +103,11 @@ func (v *vrf) Prove(sk *ecdsa.PrivateKey, alpha []byte) (beta, pi []byte, err er
 		return
 	}
 
+	err = v.validatePublicKey(&sk.PublicKey)
+	if err != nil {
+		return
+	}
+
 	var (
 		core = core{Config: &v.cfg}
 		q    = core.Q()
@@ -151,13 +156,8 @@ func (v *vrf) Prove(sk *ecdsa.PrivateKey, alpha []byte) (beta, pi []byte, err er
 	return
 }
 
-// validatePublicKey validates the public key to prevent nil pointer dereference and ensure it is on the correct curve.
+// validatePublicKey validates the public key's curve and point on the curve.
 func (v *vrf) validatePublicKey(pk *ecdsa.PublicKey) error {
-	// Validate input parameters to prevent nil pointer dereference
-	if pk == nil || pk.X == nil || pk.Y == nil {
-		return errors.New("public key and its fields (X, Y) cannot be nil")
-	}
-
 	if pk.Curve != v.cfg.Curve {
 		return errors.New("public key curve does not match config curve")
 	}
@@ -171,6 +171,11 @@ func (v *vrf) validatePublicKey(pk *ecdsa.PublicKey) error {
 
 // Verify checks the correctness of proof following [draft-irtf-cfrg-vrf-06 section 5.3](https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html#rfc.section.5.3).
 func (v *vrf) Verify(pk *ecdsa.PublicKey, alpha, pi []byte) (beta []byte, err error) {
+	// Validate input parameters to prevent nil pointer dereference
+	if pk == nil || pk.X == nil || pk.Y == nil {
+		err = errors.New("public key and its fields (X, Y) cannot be nil")
+		return
+	}
 	err = v.validatePublicKey(pk)
 	if err != nil {
 		return
