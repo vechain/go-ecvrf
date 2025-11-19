@@ -38,7 +38,7 @@ jobs:
           FuzzDecodeProofSecp256k1,
           FuzzDecodeProofP256,
           FuzzHashToCurveTryAndIncrementSecp256k1,
-          FuzzHashToCurveTryAndIncrementP256
+          FuzzHashToCurveTryAndIncrementP256,
           FuzzProveVerifyRandomKeysSecp256k1,
           FuzzProveVerifyRandomKeysP256,
         ]
