@@ -39,6 +39,8 @@ jobs:
           FuzzDecodeProofP256,
           FuzzHashToCurveTryAndIncrementSecp256k1,
           FuzzHashToCurveTryAndIncrementP256
+          FuzzProveVerifyRandomKeysSecp256k1,
+          FuzzProveVerifyRandomKeysP256,
         ]
     runs-on: ${{ matrix.os }}
     steps:
