@@ -158,10 +158,6 @@ func (v *vrf) Prove(sk *ecdsa.PrivateKey, alpha []byte) (beta, pi []byte, err er
 
 // validatePublicKey validates the public key's curve and point on the curve.
 func (v *vrf) validatePublicKey(pk *ecdsa.PublicKey) error {
-	if pk.Curve != v.cfg.Curve {
-		return errors.New("public key curve does not match config curve")
-	}
-
 	if !v.cfg.Curve.IsOnCurve(pk.X, pk.Y) {
 		return errors.New("public key is not on curve")
 	}
